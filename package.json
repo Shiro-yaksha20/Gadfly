@@ -1,0 +1,18 @@
+{
+  "name": "discord-ticket-bot",
+  "version": "1.0.0",
+  "description": "DM your bot a task, it files a ticket, and keeps DMing you until it's done.",
+  "main": "src/server.js",
+  "type": "commonjs",
+  "scripts": {
+    "start": "node src/server.js",
+    "get-google-token": "node scripts/get-google-token.js"
+  },
+  "dependencies": {
+    "discord.js": "^14.15.3",
+    "express": "^4.19.2",
+    "node-cron": "^3.0.3",
+    "dotenv": "^16.4.5",
+    "googleapis": "^140.0.1"
+  }
+}
