@@ -14,7 +14,7 @@ function ageLabel(ts) {
 }
 
 async function runPingCheck() {
-  const allOpen = listOpenTickets();
+  const allOpen = await listOpenTickets();
   // Skip tickets snoozed into the future — their alarm just hasn't rung yet.
   const due = allOpen.filter((t) => !t.remindAt || t.remindAt <= Date.now());
   if (due.length === 0) return;
@@ -27,9 +27,9 @@ async function runPingCheck() {
     );
     if (message) {
       await addCheckReaction(message);
-      setPingMessageId(t.id, message.id);
+      await setPingMessageId(t.id, message.id);
     }
-    markPinged(t.id);
+    await markPinged(t.id);
     if (t.googleEventId) {
       await rescheduleEvent(t.googleEventId); // re-fires the phone popup
     }

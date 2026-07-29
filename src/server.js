@@ -35,7 +35,7 @@ async function handleMessage(text) {
   const parsed = parseIncoming(text);
 
   if (parsed.type === 'close') {
-    const result = resolveTicketRef(parsed.ref);
+    const result = await resolveTicketRef(parsed.ref);
     if (result.match === 'none') {
       await sendDM(`Couldn't find an open ticket matching "${parsed.ref}". Send "list" to see what's open.`);
       return;
@@ -50,7 +50,7 @@ async function handleMessage(text) {
   }
 
   if (parsed.type === 'remind') {
-    const result = resolveTicketRef(parsed.ref);
+    const result = await resolveTicketRef(parsed.ref);
     if (result.match === 'none') {
       await sendDM(`Couldn't find an open ticket matching "${parsed.ref}".`);
       return;
@@ -70,7 +70,7 @@ async function handleMessage(text) {
   }
 
   if (parsed.type === 'list') {
-    const open = listOpenTickets();
+    const open = await listOpenTickets();
     const reply = open.length === 0
       ? 'Nothing open. Nice.'
       : open.map((t) => `**${t.id}** — ${t.title}`).join('\n');

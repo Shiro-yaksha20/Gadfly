@@ -28,8 +28,8 @@ router.use('/dashboard', requireAuth);
 router.use('/api/tickets', requireAuth);
 
 // --- JSON API ---
-router.get('/api/tickets', (req, res) => {
-  res.json(listAllTickets());
+router.get('/api/tickets', async (req, res) => {
+  res.json(await listAllTickets());
 });
 
 router.post('/api/tickets', express.json(), async (req, res) => {

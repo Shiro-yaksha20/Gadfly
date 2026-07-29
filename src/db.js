@@ -1,35 +1,44 @@
-const fs = require('fs');
-const path = require('path');
+const { Redis } = require('@upstash/redis');
 
-const DB_PATH = path.join(__dirname, '..', 'data', 'tickets.json');
+// One JSON blob holding everything, stored under a single Redis key —
+// mirrors the old local-file structure exactly, just over the network now.
+const DB_KEY = 'gadfly:tickets-db';
 
-function ensureDb() {
-  const dir = path.dirname(DB_PATH);
-  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-  if (!fs.existsSync(DB_PATH)) {
-    fs.writeFileSync(DB_PATH, JSON.stringify({ counter: 1, tickets: [] }, null, 2));
+let redis = null;
+function getClient() {
+  if (!redis) {
+    redis = new Redis({
+      url: process.env.UPSTASH_REDIS_REST_URL,
+      token: process.env.UPSTASH_REDIS_REST_TOKEN,
+    });
   }
+  return redis;
 }
 
-function readDb() {
-  ensureDb();
-  return JSON.parse(fs.readFileSync(DB_PATH, 'utf8'));
+async function readDb() {
+  const client = getClient();
+  const data = await client.get(DB_KEY);
+  if (!data) {
+    const initial = { counter: 1, tickets: [] };
+    await client.set(DB_KEY, initial);
+    return initial;
+  }
+  return data; // @upstash/redis auto-parses stored JSON back into an object
 }
 
-function writeDb(data) {
-  fs.writeFileSync(DB_PATH, JSON.stringify(data, null, 2));
+async function writeDb(data) {
+  const client = getClient();
+  await client.set(DB_KEY, data);
 }
 
 module.exports = { readDb, writeDb };
 
 /*
-  NOTE ON PERSISTENCE:
-  This stores tickets in a JSON file on disk. On most free hosts (Render free web
-  service, Railway without a volume) the filesystem is wiped on redeploy/restart,
-  but survives normal uptime in between. For this personal-scale use case that's
-  usually fine. If you want tickets to survive redeploys too, either:
-    - Add a persistent volume (Railway supports this directly), or
-    - Swap this file for a free hosted SQLite like Turso, or Postgres on Neon/Supabase.
-  The rest of the code only talks to readDb()/writeDb(), so swapping storage later
-  means only touching this file.
+  NOTE ON CONCURRENCY:
+  This does a plain get-then-set with no locking. For a single person using
+  one bot, two writes landing at the exact same millisecond is essentially
+  never going to happen in practice, so this is left simple on purpose. If
+  gadfly ever grows into a multi-user tool, this would need real
+  read-modify-write transactions (Upstash supports these) to avoid one
+  write silently clobbering another.
 */

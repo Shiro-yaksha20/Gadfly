@@ -7,8 +7,8 @@ function nextId(db) {
   return id;
 }
 
-function fileTicket(title, remindAt = null) {
-  const db = readDb();
+async function fileTicket(title, remindAt = null) {
+  const db = await readDb();
   const ticket = {
     id: nextId(db),
     title: title.trim(),
@@ -18,83 +18,80 @@ function fileTicket(title, remindAt = null) {
     lastPingedAt: null,
     googleEventId: null,
     remindAt: remindAt || null,
-    pingMessageId: null, // Discord message ID of its most recent ping/confirmation, for reaction-close
+    pingMessageId: null,
   };
   db.tickets.push(ticket);
-  writeDb(db);
+  await writeDb(db);
   return ticket;
 }
 
-function listOpenTickets() {
-  const db = readDb();
+async function listOpenTickets() {
+  const db = await readDb();
   return db.tickets
     .filter((t) => t.status !== 'done')
     .sort((a, b) => a.createdAt - b.createdAt);
 }
 
-function listAllTickets() {
-  return readDb().tickets;
+async function listAllTickets() {
+  const db = await readDb();
+  return db.tickets;
 }
 
-function closeTicket(id) {
-  const db = readDb();
+async function closeTicket(id) {
+  const db = await readDb();
   const t = db.tickets.find((t) => t.id.toLowerCase() === id.toLowerCase());
   if (!t) return null;
   t.status = 'done';
   t.doneAt = Date.now();
-  writeDb(db);
+  await writeDb(db);
   return t;
 }
 
-function setGoogleEventId(id, googleEventId) {
-  const db = readDb();
+async function setGoogleEventId(id, googleEventId) {
+  const db = await readDb();
   const t = db.tickets.find((x) => x.id === id);
   if (t) {
     t.googleEventId = googleEventId;
-    writeDb(db);
+    await writeDb(db);
   }
 }
 
-function setRemindAt(id, timestamp) {
-  const db = readDb();
+async function setRemindAt(id, timestamp) {
+  const db = await readDb();
   const t = db.tickets.find((x) => x.id.toLowerCase() === id.toLowerCase());
   if (!t) return null;
   t.remindAt = timestamp;
-  writeDb(db);
+  await writeDb(db);
   return t;
 }
 
-function setPingMessageId(id, messageId) {
-  const db = readDb();
+async function setPingMessageId(id, messageId) {
+  const db = await readDb();
   const t = db.tickets.find((x) => x.id === id);
   if (t) {
     t.pingMessageId = messageId;
-    writeDb(db);
+    await writeDb(db);
   }
 }
 
-function findTicketByPingMessageId(messageId) {
-  const db = readDb();
+async function findTicketByPingMessageId(messageId) {
+  const db = await readDb();
   return db.tickets.find((t) => t.pingMessageId === messageId && t.status !== 'done') || null;
 }
 
-function markPinged(id) {
-  const db = readDb();
+async function markPinged(id) {
+  const db = await readDb();
   const t = db.tickets.find((x) => x.id === id);
   if (t) {
     t.lastPingedAt = Date.now();
-    writeDb(db);
+    await writeDb(db);
   }
 }
 
 // Resolves a typed reference to a ticket — either a real ID ("TCK-003") or a
 // loose keyword match against open ticket titles ("epfo", "report").
-// Returns one of:
-//   { match: 'single', ticket }
-//   { match: 'ambiguous', candidates: [...] }
-//   { match: 'none' }
-function resolveTicketRef(ref) {
-  const db = readDb();
+async function resolveTicketRef(ref) {
+  const db = await readDb();
   const trimmedRef = ref.trim();
 
   if (/^tck-\d+$/i.test(trimmedRef)) {
@@ -111,19 +108,8 @@ function resolveTicketRef(ref) {
   return { match: 'ambiguous', candidates };
 }
 
-// Small command parser for incoming Discord text / dashboard input.
-// "done report" / "close epfo"            -> closes the open ticket whose
-//                                            title contains that keyword
-//                                            (or an exact TCK-00X ID)
-//                                            NOTE: "finish"/"finished" are NOT
-//                                            close synonyms — they collide
-//                                            with titles like "Finish report"
-// "list" or "status"                      -> lists open tickets
-// "remind report at 6pm" / "in 30m"       -> sets/edits that ticket's alarm
-// "snooze report 30m"                     -> same as remind, relative shorthand
-// "Finish report at 6pm" / "... in 2h"    -> files a ticket AND sets its alarm,
-//                                            if the trailing bit parses as a time
-// anything else                           -> files a new ticket, no alarm
+// Small command parser for incoming Discord text / dashboard input. This one
+// stays synchronous — it's pure string parsing, no database access.
 function parseIncoming(text) {
   const trimmed = text.trim();
   const lower = trimmed.toLowerCase();
@@ -137,7 +123,6 @@ function parseIncoming(text) {
   if (remindMatch) {
     return { type: 'remind', ref: remindMatch[2].trim(), timeExpr: remindMatch[3] };
   }
-  // Also allow a bare relative duration with no "in" prefix, e.g. "snooze payslip 30m"
   const bareDurationMatch = trimmed.match(
     /^(remind|snooze)\s+(.+?)\s+(\d+\s*(?:m|min|mins|minute|minutes|h|hr|hrs|hour|hours))$/i
   );
@@ -149,7 +134,6 @@ function parseIncoming(text) {
     return { type: 'list' };
   }
 
-  // Try to peel off a trailing time expression, e.g. "Finish report at 6pm"
   const suffixMatch = trimmed.match(/^(.+?)\s+((?:at|in)\s+.+)$/i);
   if (suffixMatch) {
     const candidateTime = parseTimeExpression(suffixMatch[2]);

@@ -1,4 +1,6 @@
-# Discord + Google Calendar + Web Dashboard Ticket Bot
+# gadfly
+
+*A self-hosted task nag — text it a to-do, it won't stop pinging Discord and your phone's calendar until you mark it done.*
 
 > Fork this, follow the setup steps below, and it's entirely yours — every
 > secret (bot token, Google credentials, dashboard password) lives in your
@@ -103,10 +105,12 @@ Copy `.env.example` to `.env` and fill in:
 - `PING_INTERVAL_MINUTES` (default 30)
 - `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_REFRESH_TOKEN`, `GOOGLE_CALENDAR_ID`
 - `DASHBOARD_USER`, `DASHBOARD_PASSWORD` (protects the web dashboard — pick a real password)
+- `UPSTASH_REDIS_REST_URL`, `UPSTASH_REDIS_REST_TOKEN` (required — this is where tickets are actually stored, see the Database section below)
 
 Never commit your real `.env` — only `.env.example` should go in the repo.
 (Skip the Google values if you just want Discord for now — the bot detects
-that Calendar isn't configured and keeps working without it.)
+that Calendar isn't configured and keeps working without it. Upstash is not
+optional — the bot has no local fallback storage anymore.)
 
 ## 5. Run it locally to test
 
@@ -140,14 +144,43 @@ in with `DASHBOARD_USER` / `DASHBOARD_PASSWORD` to view and close tickets
 from a browser — handy from your phone too, bookmark it or add it to your
 home screen for a one-tap view.
 
-## Notes on persistence
+## Keeping Render's free tier awake (skip if you're paying for always-on)
 
-Tickets are stored in `data/tickets.json` on disk. This survives normal
-uptime fine, but on Render's free tier the disk resets on redeploy. If you
-want tickets to survive redeploys too, add a persistent volume (Railway
-supports this natively) or swap `src/db.js` for a small hosted database later
-— everything else only talks to `readDb()`/`writeDb()`, so that's a
-contained change.
+Render's free web services spin down after 15 minutes of no incoming
+requests, which kills the bot's Discord connection and stops scheduled
+pings until something wakes it back up. Since gadfly needs to stay
+always-on to actually nag you on schedule, fix this with a free external
+uptime pinger:
+
+1. Sign up free at https://uptimerobot.com (no card required).
+2. Add New Monitor → Monitor Type: **HTTP(s)**.
+3. URL: your root Render URL, e.g. `https://your-app-name.onrender.com`
+   (no `/dashboard`, just the root).
+4. Monitoring Interval: **5 minutes** (the only free option — comfortably
+   under Render's 15-minute sleep threshold).
+5. Save. UptimeRobot now pings your service every 5 min, 24/7, which resets
+   Render's inactivity clock before it ever gets a chance to sleep.
+
+This is a common workaround, not an official Render feature — if Render
+ever changes free-tier sleep behavior, this may stop working, in which case
+upgrading to Render's Starter plan (or moving to Railway) is the fallback.
+
+## Database (Upstash Redis, free)
+
+Tickets are stored in a free Upstash Redis database — not a local file — so
+they survive Render redeploys and restarts without disappearing.
+
+1. Go to https://upstash.com → sign up free (no card required).
+2. Create a database → any name, pick a region close to your Render
+   deployment region for lower latency (doesn't matter much at this scale).
+3. On the database's page, find **REST API** section and copy:
+   - `UPSTASH_REDIS_REST_URL`
+   - `UPSTASH_REDIS_REST_TOKEN`
+4. Add both to your `.env` locally and to Render's Environment tab.
+
+Free tier covers 500K commands/month and 256MB of data — filing and
+pinging tickets uses a handful of commands each, so this is far more
+headroom than a personal ticket bot will ever use.
 
 ## Commands recap
 
@@ -157,3 +190,7 @@ contained change.
 - `done epfo` / `close payslip` → closes the open ticket matching that keyword (or use the exact `TCK-002` ID)
 - React ✅ on any ping or filed-confirmation message → closes that ticket, no typing
 - `remind epfo at 6pm` / `remind epfo in 30m` / `snooze payslip 30m` → sets or edits that ticket's alarm time (keyword or exact ID both work)
+
+## License
+
+MIT — see [LICENSE](./LICENSE). Fork it, change it, ship it as your own.
