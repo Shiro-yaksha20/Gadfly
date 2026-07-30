@@ -203,7 +203,18 @@ async function setReminder(id, localDatetimeValue){
 
 document.getElementById('input').addEventListener('keydown', e => { if (e.key==='Enter') fileTicket(); });
 load();
-setInterval(load, 15000);
+// Poll every 30s while the tab is actually visible; pause entirely when it's
+// backgrounded/minimized, so leaving this tab open doesn't quietly burn
+// through Redis read commands for no reason.
+let pollTimer = setInterval(load, 30000);
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) {
+    clearInterval(pollTimer);
+  } else {
+    load(); // catch up immediately on refocus
+    pollTimer = setInterval(load, 30000);
+  }
+});
 </script>
 </body>
 </html>`;

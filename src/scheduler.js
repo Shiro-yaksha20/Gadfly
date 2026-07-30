@@ -1,5 +1,5 @@
 const cron = require('node-cron');
-const { listOpenTickets, markPinged, setPingMessageId } = require('./tickets');
+const { listOpenTickets, updateTicket } = require('./tickets');
 const { sendDM, addCheckReaction } = require('./discord');
 const { rescheduleEvent } = require('./calendar');
 
@@ -25,11 +25,12 @@ async function runPingCheck() {
     const message = await sendDM(
       `Still open: **${t.id}** — ${t.title} (open ${ageLabel(t.createdAt)})\n(react ✅ to close, or reply "done" + a keyword from the title)`
     );
+    const patch = { lastPingedAt: Date.now() };
     if (message) {
       await addCheckReaction(message);
-      await setPingMessageId(t.id, message.id);
+      patch.pingMessageId = message.id;
     }
-    await markPinged(t.id);
+    await updateTicket(t.id, patch); // single write covering both fields
     if (t.googleEventId) {
       await rescheduleEvent(t.googleEventId); // re-fires the phone popup
     }

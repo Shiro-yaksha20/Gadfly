@@ -4,7 +4,7 @@ const {
   listOpenTickets,
   parseIncoming,
   resolveTicketRef,
-  setPingMessageId,
+  updateTicket,
   findTicketByPingMessageId,
 } = require('./tickets');
 const { parseTimeExpression } = require('./timeParse');
@@ -78,21 +78,29 @@ async function handleMessage(text) {
     return;
   }
 
-  // Default: file a new ticket (parsed.remindAt is set if the text ended in
-  // something like "at 6pm" or "in 2h")
-  const ticket = await fileTicketWithCalendar(parsed.title, parsed.remindAt);
+  // Default: file a new ticket. fileTicketWithCalendar does its own
+  // read+write to create the ticket, then we send the Discord message and
+  // fold the calendar event ID + message ID into ONE combined write below,
+  // instead of two separate round trips.
+  const { ticket, googleEventId } = await fileTicketWithCalendar(parsed.title, parsed.remindAt);
   const calendarNote = isConfigured() ? '' : ' (Calendar reminders not set up yet)';
   const timeNote = parsed.remindAt ? ` — pings at ${new Date(parsed.remindAt).toLocaleString()}` : '';
   const message = await sendDM(`Filed **${ticket.id}**: ${ticket.title}${timeNote}${calendarNote}\n(react ✅ here anytime to close it)`);
+
+  const patch = {};
+  if (googleEventId) patch.googleEventId = googleEventId;
   if (message) {
     await addCheckReaction(message);
-    setPingMessageId(ticket.id, message.id);
+    patch.pingMessageId = message.id;
+  }
+  if (Object.keys(patch).length > 0) {
+    await updateTicket(ticket.id, patch); // single write covering both fields
   }
 }
 
 // --- Handle a ✅ reaction on any message the bot sent ---
 async function handleReaction(messageId) {
-  const ticket = findTicketByPingMessageId(messageId);
+  const ticket = await findTicketByPingMessageId(messageId);
   if (!ticket) return; // reaction on an old/unrelated message, ignore
   const t = await closeTicketWithCalendar(ticket.id);
   await sendDM(`Closed **${t.id}** — ${t.title} (via reaction)`);

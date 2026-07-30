@@ -47,31 +47,20 @@ async function closeTicket(id) {
   return t;
 }
 
-async function setGoogleEventId(id, googleEventId) {
-  const db = await readDb();
-  const t = db.tickets.find((x) => x.id === id);
-  if (t) {
-    t.googleEventId = googleEventId;
-    await writeDb(db);
-  }
-}
-
-async function setRemindAt(id, timestamp) {
+// Patches one or more fields on a ticket in a single read+write round trip —
+// use this instead of chaining several single-field setters, since each of
+// those is its own full read/write of the whole ticket list.
+async function updateTicket(id, patch) {
   const db = await readDb();
   const t = db.tickets.find((x) => x.id.toLowerCase() === id.toLowerCase());
   if (!t) return null;
-  t.remindAt = timestamp;
+  Object.assign(t, patch);
   await writeDb(db);
   return t;
 }
 
-async function setPingMessageId(id, messageId) {
-  const db = await readDb();
-  const t = db.tickets.find((x) => x.id === id);
-  if (t) {
-    t.pingMessageId = messageId;
-    await writeDb(db);
-  }
+async function setRemindAt(id, timestamp) {
+  return updateTicket(id, { remindAt: timestamp });
 }
 
 async function findTicketByPingMessageId(messageId) {
@@ -80,12 +69,7 @@ async function findTicketByPingMessageId(messageId) {
 }
 
 async function markPinged(id) {
-  const db = await readDb();
-  const t = db.tickets.find((x) => x.id === id);
-  if (t) {
-    t.lastPingedAt = Date.now();
-    await writeDb(db);
-  }
+  return updateTicket(id, { lastPingedAt: Date.now() });
 }
 
 // Resolves a typed reference to a ticket — either a real ID ("TCK-003") or a
@@ -151,9 +135,8 @@ module.exports = {
   listAllTickets,
   closeTicket,
   markPinged,
-  setGoogleEventId,
+  updateTicket,
   setRemindAt,
-  setPingMessageId,
   findTicketByPingMessageId,
   resolveTicketRef,
   parseIncoming,
